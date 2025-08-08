@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <title>Ping Link Manager</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; }
+        form { margin-bottom: 20px; }
+        input { padding: 8px; width: 300px; }
+        button { padding: 8px 12px; margin-left: 5px; cursor: pointer; }
+        .links { margin-top: 20px; }
+        .link-item { margin-bottom: 8px; }
+        .remove-btn { background: red; color: white; border: none; padding: 4px 8px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🔗 Render App Auto Ping</h1>
+
+    <form action="/add" method="POST">
+        <input type="text" name="url" placeholder="https://example.com" required>
+        <button type="submit">➕ লিঙ্ক যোগ করুন</button>
+    </form>
+
+    <div class="links">
+        <h2>📜 লিঙ্ক লিস্ট</h2>
+        <div id="linkList">লোড হচ্ছে...</div>
+    </div>
+
+    <script>
+        async function loadLinks() {
+            const res = await fetch('/links');
+            const data = await res.json();
+            const list = document.getElementById("linkList");
+            list.innerHTML = '';
+            data.forEach(link => {
+                const div = document.createElement("div");
+                div.className = "link-item";
+                div.innerHTML = `
+                    ${link} 
+                    <form action="/remove" method="POST" style="display:inline;">
+                        <input type="hidden" name="url" value="${link}">
+                        <button class="remove-btn">মুছুন</button>
+                    </form>
+                `;
+                list.appendChild(div);
+            });
+        }
+        loadLinks();
+    </script>
+</body>
+</html>
