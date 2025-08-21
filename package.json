@@ -29,6 +29,7 @@
     "delayed-stream": "^1.0.0",
     "depd": "^2.0.0",
     "destroy": "^1.2.0",
+    "dotenv": "^17.2.1",
     "dunder-proto": "^1.0.1",
     "ee-first": "^1.1.1",
     "encodeurl": "^2.0.0",
@@ -71,9 +72,11 @@
     "mime-db": "^1.52.0",
     "mime-types": "^2.1.35",
     "minimatch": "^3.1.2",
+    "mongoose": "^8.17.2",
     "ms": "^2.0.0",
     "negotiator": "^0.6.3",
     "node-cron": "^3.0.3",
+    "nodemailer": "^7.0.5",
     "nodemon": "^3.1.10",
     "normalize-path": "^3.0.0",
     "object-inspect": "^1.13.4",
@@ -122,7 +125,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/Pavelprfb/LinkMonitor/issues"
   },

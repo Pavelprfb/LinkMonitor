@@ -1,56 +1,108 @@
+require('dotenv').config();
 const express = require("express");
 const axios = require("axios");
 const cron = require("node-cron");
-const fs = require("fs");
+const mongoose = require("mongoose");
+const nodemailer = require("nodemailer");
 const path = require("path");
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve HTML files
-app.use(express.static(path.join(process.cwd(), "public")));
+// ================== MONGODB SETUP ================== //
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+.then(() => console.log("✅ Connected to MongoDB"))
+.catch(err => console.error("❌ MongoDB connection error:", err));
 
-let links = JSON.parse(fs.readFileSync("links.json"));
+const linkSchema = new mongoose.Schema({ link: String });
+const Link = mongoose.model("Link", linkSchema);
 
-// API to add link
-app.post("/add", (req, res) => {
-    const { url } = req.body;
-    if (!url) return res.send("❌ Please provide a URL");
-    if (!links.includes(url)) {
-        links.push(url);
-        fs.writeFileSync("links.json", JSON.stringify(links, null, 2));
-        return res.send("✅ Link added successfully");
+// ================== MAIL SETUP ================== //
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_PASS
     }
-    res.send("⚠️ This link already exists");
 });
 
-// API to get all links
-app.get("/links", (req, res) => {
-    res.json(links);
+function sendMail(subject, text) {
+    transporter.sendMail({
+        from: process.env.GMAIL_USER,
+        to: process.env.MY_INBOX_MAIL,
+        subject,
+        text
+    }, (err, info) => {
+        if(err) console.error('Email error:', err);
+    });
+}
+
+// ================== ROUTES ================== //
+app.get("/", (req, res) => {
+    res.sendFile(__dirname + "/public/index.html");
 });
 
-// API to remove link
-app.post("/remove", (req, res) => {
+// Add new link
+app.post("/add", async (req, res) => {
     const { url } = req.body;
-    links = links.filter(link => link !== url);
-    fs.writeFileSync("links.json", JSON.stringify(links, null, 2));
-    res.send("🗑️ Link removed successfully");
+    if(!url) return res.send("❌ Please provide a URL");
+
+    const exists = await Link.findOne({ link: url });
+    if(exists) return res.send("⚠️ This link already exists");
+
+    const newLink = new Link({ link: url });
+    await newLink.save();
+
+    sendMail("New Link Added", `✅ New link added: ${url}`);
+    res.send("✅ Link added successfully and email sent");
 });
 
-// Ping system every 5 minutes
-cron.schedule("*/5 * * * *", async () => {
+// Get all links
+app.get("/links", async (req, res) => {
+    const links = await Link.find();
+    res.json(links.map(l => l.link));
+});
+
+// Remove link
+app.post("/remove", async (req, res) => {
+    const { url } = req.body;
+    await Link.deleteOne({ link: url });
+    res.send("🗑️ Link removed successfully");
+    sendMail("Link Deleted", `❌ link delete: ${url}`);
+});
+
+// ================== PING SYSTEM (SUMMARY EMAIL) ================== //
+// Cron every 1 minute// ================== PING SYSTEM (SUMMARY EMAIL) ================== //
+// Cron every 1 hour
+cron.schedule("0 * * * *", async () => {  // প্রতি ঘন্টায় একবার
+    const allLinks = await Link.find();
+    if(allLinks.length === 0) return;
+
     console.log("⏳ Starting ping...");
-    for (let link of links) {
+    let results = [];
+
+    for(let l of allLinks) {
         try {
-            await axios.get(link);
-            console.log(`✅ Ping successful: ${link}`);
-        } catch (err) {
-            console.log(`❌ Ping failed: ${link}`);
+            await axios.get(l.link);
+            console.log(`✅ Ping successful: ${l.link}`);
+            results.push(`✅ Success: ${l.link}`);
+        } catch(err) {
+            console.log(`❌ Ping failed: ${l.link}`);
+            results.push(`❌ Failed: ${l.link}`);
         }
     }
+
+    const summary = results.join("\n");
+    sendMail("Ping Summary", summary);
+    console.log("📧 Ping summary email sent");
 });
 
+
+// ================== SERVER ================== //
 app.listen(3000, () => {
     console.log("🚀 Server running: http://localhost:3000");
 });
