@@ -9,6 +9,7 @@ const path = require("path");
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, "public"))); // public ফোল্ডার
 
 // ================== MONGODB SETUP ================== //
 mongoose.connect(process.env.MONGO_URI, {
@@ -46,7 +47,6 @@ app.get("/", (req, res) => {
     res.sendFile(__dirname + "/public/index.html");
 });
 
-// Add new link
 app.post("/add", async (req, res) => {
     const { url } = req.body;
     if(!url) return res.send("❌ Please provide a URL");
@@ -56,51 +56,71 @@ app.post("/add", async (req, res) => {
 
     const newLink = new Link({ link: url });
     await newLink.save();
-
     sendMail("New Link Added", `✅ New link added: ${url}`);
     res.send("✅ Link added successfully and email sent");
 });
 
-// Get all links
 app.get("/links", async (req, res) => {
     const links = await Link.find();
     res.json(links.map(l => l.link));
 });
 
-// Remove link
 app.post("/remove", async (req, res) => {
     const { url } = req.body;
     await Link.deleteOne({ link: url });
+    sendMail("Link Deleted", `❌ Link deleted: ${url}`);
     res.send("🗑️ Link removed successfully");
-    sendMail("Link Deleted", `❌ link delete: ${url}`);
 });
 
-// ================== PING SYSTEM (SUMMARY EMAIL) ================== //
-// Cron every 1 minute// ================== PING SYSTEM (SUMMARY EMAIL) ================== //
-// Cron every 1 hour
-cron.schedule("0 * * * *", async () => {  // প্রতি ঘন্টায় একবার
+// ================== PING SYSTEM ================== //
+let nextPingTime = new Date();
+
+// প্রতি 5 মিনিটে পিং
+cron.schedule("*/5 * * * *", async () => {
     const allLinks = await Link.find();
     if(allLinks.length === 0) return;
 
-    console.log("⏳ Starting ping...");
+    console.log("⏳ Starting 5-min ping...");
     let results = [];
-
     for(let l of allLinks) {
         try {
             await axios.get(l.link);
-            console.log(`✅ Ping successful: ${l.link}`);
+            console.log(`✅ Ping successful (5min): ${l.link}`);
             results.push(`✅ Success: ${l.link}`);
         } catch(err) {
-            console.log(`❌ Ping failed: ${l.link}`);
+            console.log(`❌ Ping failed (5min): ${l.link}`);
+            results.push(`❌ Failed: ${l.link}`);
+        }
+    }
+
+    // পরবর্তী পিং ৫ মিনিট পরে
+    nextPingTime = new Date(new Date().getTime() + 5*60*1000);
+});
+
+// প্রতি ঘণ্টায় সারসংক্ষেপ ইমেইল
+cron.schedule("0 * * * *", async () => {
+    const allLinks = await Link.find();
+    if(allLinks.length === 0) return;
+
+    console.log("⏳ Sending hourly summary...");
+    let results = [];
+    for(let l of allLinks) {
+        try {
+            await axios.get(l.link);
+            results.push(`✅ Success: ${l.link}`);
+        } catch(err) {
             results.push(`❌ Failed: ${l.link}`);
         }
     }
 
     const summary = results.join("\n");
-    sendMail("Ping Summary", summary);
-    console.log("📧 Ping summary email sent");
+    sendMail("Hourly Ping Summary", summary);
+    console.log("📧 Hourly summary email sent");
 });
 
+app.get("/next-ping", (req, res) => {
+    res.json({ nextPing: nextPingTime });
+});
 
 // ================== SERVER ================== //
 app.listen(3000, () => {
